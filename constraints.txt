@@ -10,6 +10,8 @@ blinker==1.9.0
     # via streamlit
 boolean-py==5.0
     # via license-expression
+build==1.5.1
+    # via pip-tools
 cachecontrol==0.14.4
     # via
     #   cachecontrol
@@ -23,8 +25,10 @@ cffi==2.0.0
 charset-normalizer==3.4.6
     # via requests
 click==8.3.1
-    # via streamlit
-cryptography==46.0.6
+    # via
+    #   pip-tools
+    #   streamlit
+cryptography==48.0.1
     # via google-auth
 cyclonedx-python-lib==11.7.0
     # via pip-audit
@@ -36,7 +40,7 @@ filelock==3.25.2
     # via cachecontrol
 gitdb==4.0.12
     # via gitpython
-gitpython==3.1.46
+gitpython==3.1.50
     # via streamlit
 google-ai-generativelanguage==0.6.15
     # via google-generativeai
@@ -72,7 +76,7 @@ httplib2==0.31.2
     # via
     #   google-api-python-client
     #   google-auth-httplib2
-idna==3.11
+idna==3.15
     # via requests
 iniconfig==2.3.0
     # via pytest
@@ -92,7 +96,7 @@ markupsafe==3.0.3
     # via jinja2
 mdurl==0.1.2
     # via markdown-it-py
-msgpack==1.1.2
+msgpack==1.2.1
     # via cachecontrol
 narwhals==2.18.1
     # via
@@ -110,16 +114,18 @@ packageurl-python==0.17.6
 packaging==26.0
     # via
     #   altair
+    #   build
     #   pip-audit
     #   pip-requirements-parser
     #   plotly
     #   pytest
     #   streamlit
+    #   wheel
 pandas==2.3.3
     # via
     #   inventory-management-genai (pyproject.toml)
     #   streamlit
-pillow==12.1.1
+pillow==12.2.0
     # via streamlit
 pip-api==0.0.34
     # via pip-audit
@@ -127,6 +133,8 @@ pip-audit==2.10.0
     # via inventory-management-genai (pyproject.toml)
 pip-requirements-parser==32.0.1
     # via pip-audit
+pip-tools==7.5.3
+    # via inventory-management-genai (pyproject.toml)
 platformdirs==4.9.4
     # via pip-audit
 plotly==6.6.0
@@ -170,7 +178,11 @@ pyparsing==3.3.2
     # via
     #   httplib2
     #   pip-requirements-parser
-pytest==9.0.2
+pyproject-hooks==1.2.0
+    # via
+    #   build
+    #   pip-tools
+pytest==9.0.3
     # via inventory-management-genai (pyproject.toml)
 python-dateutil==2.9.0.post0
     # via pandas
@@ -212,17 +224,19 @@ tomli==2.4.1
     # via pip-audit
 tomli-w==1.2.0
     # via pip-audit
-tornado==6.5.5
+tornado==6.5.7
     # via streamlit
 tqdm==4.67.3
     # via google-generativeai
 typing-extensions==4.15.0
     # via
     #   altair
+    #   cyclonedx-python-lib
     #   google-generativeai
     #   grpcio
     #   pydantic
     #   pydantic-core
+    #   referencing
     #   streamlit
     #   typing-inspection
 typing-inspection==0.4.2
@@ -231,8 +245,13 @@ tzdata==2025.3
     # via pandas
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
+watchdog==6.0.0
+    # via streamlit
+wheel==0.47.0
+    # via pip-tools
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
+# setuptools
