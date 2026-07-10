@@ -19,10 +19,6 @@ COLUMN_MAPPING_PROMPT_NAME = "column_mapping"
 COLUMN_MAPPING_PROMPT_VERSION = "v1"
 
 
-def _normalize_token(value: str) -> str:
-    return re.sub(r"[^A-Z0-9]+", "", value.upper())
-
-
 def _fallback_sql(question: str) -> str:
     text = question.lower().strip()
 
@@ -58,41 +54,10 @@ def _fallback_column_mapping(prompt: str) -> str:
     if database_match:
         database_columns = [value.strip() for value in database_match.group(1).split(",") if value.strip()]
 
-    mapping: dict[str, str] = {}
-    db_lookup = {_normalize_token(column): column for column in database_columns}
+    # Lazy import avoids a circular dependency (utils imports prompt builders).
+    from utils import _heuristic_column_mapping
 
-    aliases = {
-        "NAME": ("NAME", "PRODUCTNAME", "ITEMNAME", "PRODUCT"),
-        "CATEGORY": ("CATEGORY", "TYPE", "GROUP"),
-        "BRAND": ("BRAND",),
-        "PRICE": ("PRICE", "COST", "AMOUNT", "RATE"),
-        "STOCK": ("STOCK", "QUANTITY", "QTY", "INVENTORY"),
-        "QUANTITY": ("QUANTITY", "STOCK", "QTY", "INVENTORY"),
-        "COLOR": ("COLOR", "COLOUR"),
-        "SIZE": ("SIZE",),
-        "WEIGHT": ("WEIGHT",),
-        "SPECIFICATIONS": ("SPECIFICATIONS", "SPECIFICATION", "DETAILS", "DESCRIPTION", "SPEC"),
-        "ID": ("ID", "PRODUCTID"),
-    }
-
-    for excel_column in excel_columns:
-        normalized = _normalize_token(excel_column)
-        if normalized in db_lookup:
-            mapping[excel_column] = db_lookup[normalized]
-            continue
-
-        mapped_column = None
-        for target, candidates in aliases.items():
-            if normalized in candidates:
-                mapped_column = db_lookup.get(_normalize_token(target), target)
-                break
-
-        if mapped_column is None:
-            mapped_column = re.sub(r"[^A-Z0-9]+", "_", excel_column.upper()).strip("_") or "COLUMN"
-
-        mapping[excel_column] = mapped_column
-
-    return json.dumps(mapping)
+    return json.dumps(_heuristic_column_mapping(excel_columns, database_columns))
 
 
 def get_sql_prompt_metadata() -> dict[str, str]:

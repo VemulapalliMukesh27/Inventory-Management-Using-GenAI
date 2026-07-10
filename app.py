@@ -26,7 +26,7 @@ from database import (
     get_product_schema_description,
     validate_product_schema,
 )
-from excel_processing import preview_excel_import, process_excel_file
+from excel_processing import estimate_import_impact, preview_excel_import, process_excel_file
 from guardrails import (
     DestructiveActionApprovalRequired,
     SchemaChangeApprovalRequired,
@@ -306,9 +306,21 @@ else:
         st.write("Column names in the uploaded file:", import_preview["dataframe"].columns.tolist())
         st.write("Resolved column mappings:", import_preview["column_mappings"])
         if action in {"remove", "modify"}:
+            impact = estimate_import_impact(import_preview, db_path, action)
             st.warning(
-                f"The '{action}' action changes or removes existing inventory rows."
+                f"The '{action}' action changes or removes existing inventory rows. "
+                f"File rows: {impact['rows_in_file']}; "
+                f"matching DB rows: {impact['matched_db_rows']}."
             )
+            if impact["ambiguous_names"]:
+                st.error(
+                    "Ambiguous NAME matches (include an ID column to target a specific row): "
+                    + ", ".join(impact["ambiguous_names"])
+                )
+            if impact["missing_identity_rows"]:
+                st.error(
+                    f"{impact['missing_identity_rows']} file row(s) are missing both ID and NAME."
+                )
             approve_destructive_action = st.checkbox(
                 f"Approve the '{action}' action for this import",
                 key=f"approve_destructive_{action}",
