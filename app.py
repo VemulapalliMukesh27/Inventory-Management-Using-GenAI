@@ -23,6 +23,7 @@ from database import (
     DATABASE_PATH,
     INVENTORY_VALUE_COLUMN,
     PRODUCT_TABLE,
+    ensure_schema,
     get_product_schema_description,
     validate_product_schema,
 )
@@ -185,6 +186,7 @@ st.markdown('<h2>Inventory Dashboard</h2>', unsafe_allow_html=True)
 db_path = str(DATABASE_PATH)
 
 try:
+    ensure_schema(db_path)
     validate_product_schema(db_path)
 except RuntimeError as exc:
     st.error(f"Database startup check failed: {exc}")
@@ -198,6 +200,12 @@ query = (
 df = read_sql_query(query, db_path)
 product_count = df['product_count'].values[0]
 total_inventory_value = df['total_inventory_value'].values[0]
+
+if product_count == 0:
+    st.info(
+        "The PRODUCT table is empty. Load demo data with "
+        "`python database.py --seed` (optional `--seed-count N`)."
+    )
 
 col1, col2 = st.columns(2)
 with col1:

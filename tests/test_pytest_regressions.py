@@ -253,6 +253,14 @@ def test_validate_product_schema_raises_when_table_is_absent(tmp_path: Path):
         database.validate_product_schema(db_path)
 
 
+def test_app_startup_calls_ensure_schema_before_validate():
+    app_source = Path("app.py").read_text(encoding="utf-8")
+    ensure_index = app_source.index("ensure_schema(db_path)")
+    validate_index = app_source.index("validate_product_schema(db_path)")
+    assert ensure_index < validate_index
+    assert "python database.py --seed" in app_source
+
+
 def test_process_excel_file_modify_updates_existing_rows(
     excel_processing_module,
     inventory_db: Path,

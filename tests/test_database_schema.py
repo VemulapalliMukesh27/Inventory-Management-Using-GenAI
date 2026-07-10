@@ -101,11 +101,13 @@ class AppSourceTests(unittest.TestCase):
     def test_dashboard_startup_query_uses_the_shared_stock_schema(self) -> None:
         app_source = Path("app.py").read_text()
         self.assertIn("DATABASE_PATH", app_source)
+        self.assertIn("ensure_schema", app_source)
         self.assertIn("validate_product_schema", app_source)
         self.assertIn("INVENTORY_VALUE_COLUMN", app_source)
         self.assertIn("PRODUCT_TABLE", app_source)
         self.assertIn("get_product_schema_description", app_source)
         self.assertIn("COALESCE(SUM(price *", app_source)
+        self.assertIn("python database.py --seed", app_source)
         self.assertNotIn("db_path = 'inventory.db'", app_source)
         self.assertNotIn("quantity", app_source.lower())
 
