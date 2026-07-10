@@ -455,6 +455,10 @@ def test_get_gemini_response_uses_mocked_sdk_when_api_key_is_available(monkeypat
 def test_get_gemini_response_falls_back_when_no_api_key(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
+    # SQL prompts intentionally return empty so generate_sql_query can fall back
+    # using the original user question rather than the full prompt template.
     response = prompt.get_gemini_response("how many products are there")
+    assert response == ""
 
-    assert response == "SELECT COUNT(*) AS product_count FROM PRODUCT"
+    sql = prompt.generate_sql_query("PRODUCT schema", "how many products are there")
+    assert sql == "SELECT COUNT(*) AS product_count FROM PRODUCT"

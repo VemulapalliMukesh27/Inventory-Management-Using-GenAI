@@ -70,3 +70,10 @@ class ConfigImportTests(TestCase):
         self.assertEqual(module.MISSING_CREDENTIALS, [])
         self.assertEqual(fake_genai.configure_calls, [{"api_key": "google-key"}])
         self.assertEqual(pandasai_key_in_env, "pandasai-key")
+
+    def test_default_gemini_model_is_current_and_overridable(self):
+        module, _, _ = _import_config({})
+        self.assertEqual(module.DEFAULT_GEMINI_MODEL, "gemini-3.5-flash")
+
+        module, _, _ = _import_config({"GEMINI_MODEL_NAME": "gemini-custom-test"})
+        self.assertEqual(module.DEFAULT_GEMINI_MODEL, "gemini-custom-test")

@@ -10,6 +10,10 @@ from dataclasses import dataclass
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+# Shared default for all Gemini call sites. Override with GEMINI_MODEL_NAME.
+# gemini-1.5-flash is shut down; gemini-3.5-flash is the current Flash GA model.
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-3.5-flash")
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -39,7 +43,7 @@ SETTINGS = Settings(
     pandasai_api_key=_read_env("PANDASAI_API_KEY"),
 )
 
-# Configure Google API key for Gemini Pro model
+# Configure Google API key for Gemini model
 GOOGLE_API_KEY = SETTINGS.google_api_key
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)

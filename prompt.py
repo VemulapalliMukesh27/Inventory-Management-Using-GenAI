@@ -10,6 +10,8 @@ import json
 import os
 import re
 
+from config import DEFAULT_GEMINI_MODEL
+
 _DEFAULT_SQL_LIMIT = 100
 SQL_GENERATION_PROMPT_NAME = "sql_generation"
 SQL_GENERATION_PROMPT_VERSION = "v1"
@@ -129,16 +131,44 @@ def build_column_mapping_prompt(excel_columns: list[str], existing_columns: list
     )
 
 
-def get_gemini_response(prompt: str, model_name: str = "gemini-1.5-flash") -> str:
+def _extract_sql(response: str) -> str:
+    """Pull a SQL statement out of a model response, including markdown fences."""
+
+    candidate = (response or "").strip()
+    if not candidate:
+        return ""
+
+    fence_match = re.search(r"```(?:sql)?\s*([\s\S]*?)```", candidate, re.IGNORECASE)
+    if fence_match:
+        candidate = fence_match.group(1).strip()
+
+    candidate = candidate.strip().strip("`").strip()
+
+    upper = candidate.upper()
+    if upper.startswith("SELECT") or upper.startswith("WITH"):
+        return candidate.rstrip(";").strip()
+
+    # Model sometimes wraps SQL in a short prose preface.
+    for match in re.finditer(r"\b(SELECT|WITH)\b[\s\S]*", candidate, re.IGNORECASE):
+        snippet = match.group(0).strip().rstrip(";").strip()
+        snippet_upper = snippet.upper()
+        if snippet_upper.startswith("SELECT") or snippet_upper.startswith("WITH"):
+            return snippet
+
+    return ""
+
+
+def get_gemini_response(prompt: str, model_name: str | None = None) -> str:
     """Return a Gemini response when available, otherwise a deterministic fallback."""
 
+    resolved_model = model_name or DEFAULT_GEMINI_MODEL
     api_key = os.getenv("GOOGLE_API_KEY")
     if api_key:
         try:
             import google.generativeai as genai
 
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
+            model = genai.GenerativeModel(resolved_model)
             response = model.generate_content(prompt)
             text = getattr(response, "text", None)
             if text:
@@ -149,7 +179,9 @@ def get_gemini_response(prompt: str, model_name: str = "gemini-1.5-flash") -> st
     if "excel columns" in prompt.lower() and "database columns" in prompt.lower():
         return _fallback_column_mapping(prompt)
 
-    return _fallback_sql(prompt)
+    # For SQL prompts, return empty so callers can fall back using the original question
+    # rather than keyword-matching against the full prompt template.
+    return ""
 
 
 def generate_sql_query(db_description: str, question: str) -> str:
@@ -158,7 +190,7 @@ def generate_sql_query(db_description: str, question: str) -> str:
     prompt = build_sql_generation_prompt(db_description, question)
 
     response = get_gemini_response(prompt)
-    sql = response.strip().strip("`")
+    sql = _extract_sql(response)
 
     if sql.upper().startswith("SELECT") or sql.upper().startswith("WITH"):
         return sql

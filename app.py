@@ -23,6 +23,7 @@ from database import (
     DATABASE_PATH,
     INVENTORY_VALUE_COLUMN,
     PRODUCT_TABLE,
+    get_product_schema_description,
     validate_product_schema,
 )
 from excel_processing import preview_excel_import, process_excel_file
@@ -238,10 +239,7 @@ question = st.text_area("Enter your query in natural language:")
 
 if st.button("Generate SQL Query"):
     if question:
-        db_description = (
-            "Product table schema: PRODUCT "
-            "(ID INTEGER PRIMARY KEY AUTOINCREMENT, NAME TEXT, STOCK INTEGER, PRICE REAL, CATEGORY TEXT)"
-        )
+        db_description = get_product_schema_description(db_path)
         sql_query = generate_sql_query(db_description, question)
         try:
             validated_sql = validate_read_only_sql(sql_query, allowed_tables=(PRODUCT_TABLE,))
@@ -364,23 +362,52 @@ if st.button("Process Excel File"):
     else:
         st.error("Please upload an Excel file.")
 
+def _run_analytics_action(event_type: str, runner):
+    """Execute an analytics action with audit logging and UI-safe errors."""
+    try:
+        df_full = read_sql_query("SELECT * FROM PRODUCT", db_path)
+        result = runner(df_full)
+        append_audit_event(
+            db_path,
+            event_type,
+            {
+                "status": result.status,
+                "model_name": result.model_name,
+                "error": result.error,
+                "row_count": len(df_full),
+            },
+        )
+        return result.text
+    except Exception as exc:
+        append_audit_event(
+            db_path,
+            event_type,
+            {
+                "status": "failed",
+                "error": str(exc),
+            },
+        )
+        st.error(f"Unable to complete {event_type.replace('_', ' ')}: {exc}")
+        return None
+
+
 # --------------------------
 # Inventory Insights Section
 # --------------------------
 st.markdown('<h2>Generate Inventory Insights</h2>', unsafe_allow_html=True)
 if st.button("Generate Insights"):
-    df_full = read_sql_query("SELECT * FROM PRODUCT", db_path)
-    insights = generate_insights(df_full)
-    st.write("Inventory Insights:", insights)
+    insights = _run_analytics_action("analytics_insights", generate_insights)
+    if insights is not None:
+        st.write("Inventory Insights:", insights)
 
 # --------------------------
 # Stock Prediction Section
 # --------------------------
 st.markdown('<h2>Predict Stock Needs</h2>', unsafe_allow_html=True)
 if st.button("Predict Stock Needs"):
-    df_full = read_sql_query("SELECT * FROM PRODUCT", db_path)
-    predictions = predict_stock_needs(df_full)
-    st.write("Stock Predictions:", predictions)
+    predictions = _run_analytics_action("analytics_stock_prediction", predict_stock_needs)
+    if predictions is not None:
+        st.write("Stock Predictions:", predictions)
 
 # --------------------------
 # Product Categorization Section
@@ -391,9 +418,12 @@ product_description = st.text_area("Enter the product description:")
 
 if st.button("Categorize Product"):
     if product_name and product_description:
-        df_full = read_sql_query("SELECT * FROM PRODUCT", db_path)
-        category = categorize_product(df_full, product_name, product_description)
-        st.write("Product Category:", category)
+        category = _run_analytics_action(
+            "analytics_categorize_product",
+            lambda df: categorize_product(df, product_name, product_description),
+        )
+        if category is not None:
+            st.write("Product Category:", category)
     else:
         st.error("Please provide both product name and description.")
 
@@ -402,6 +432,6 @@ if st.button("Categorize Product"):
 # --------------------------
 st.markdown('<h2>Generate Inventory Report</h2>', unsafe_allow_html=True)
 if st.button("Generate Report"):
-    df_full = read_sql_query("SELECT * FROM PRODUCT", db_path)
-    report = generate_report(df_full)
-    st.write("Inventory Report:", report)
+    report = _run_analytics_action("analytics_report", generate_report)
+    if report is not None:
+        st.write("Inventory Report:", report)
