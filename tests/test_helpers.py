@@ -180,12 +180,24 @@ class HelperSmokeTests(unittest.TestCase):
         fake_database.INVENTORY_VALUE_COLUMN = "STOCK"
         fake_database.PRODUCT_TABLE = "PRODUCT"
         fake_database.validate_product_schema = lambda path: None
+        fake_database.get_product_schema_description = (
+            lambda path=None: "Product table schema: PRODUCT (ID INTEGER, NAME TEXT, STOCK INTEGER)"
+        )
+
+        class _FakeAnalysisResult:
+            def __init__(self, text):
+                self.text = text
+                self.status = "success"
+                self.model_name = "fake-model"
+                self.error = None
 
         fake_analytics = types.ModuleType("analytics")
-        fake_analytics.generate_insights = lambda df: "insights"
-        fake_analytics.predict_stock_needs = lambda df: "predictions"
-        fake_analytics.categorize_product = lambda df, name, description: "category"
-        fake_analytics.generate_report = lambda df: "report"
+        fake_analytics.generate_insights = lambda df: _FakeAnalysisResult("insights")
+        fake_analytics.predict_stock_needs = lambda df: _FakeAnalysisResult("predictions")
+        fake_analytics.categorize_product = (
+            lambda df, name, description: _FakeAnalysisResult("category")
+        )
+        fake_analytics.generate_report = lambda df: _FakeAnalysisResult("report")
 
         fake_pandasai = types.ModuleType("pandasai")
 
@@ -218,19 +230,28 @@ class HelperSmokeTests(unittest.TestCase):
                 )
                 connection.commit()
 
-            with patched_modules(
-                {
-                    "streamlit": fake_streamlit,
-                    "pandas": fake_pandas,
-                    "config": fake_config,
-                    "database": fake_database,
-                    "analytics": fake_analytics,
-                    "pandasai": fake_pandasai,
-                }
-            ):
-                with temporary_working_directory(Path(tmpdir)):
-                    sys.modules.pop("app", None)
-                    app = importlib.import_module("app")
+            import utils as utils_module
+
+            original_pandas = utils_module._pandas
+            try:
+                # Force the lightweight dataframe shim so a stubbed pandas module
+                # cannot break pyarrow/pandas interop during app import.
+                utils_module._pandas = None
+                with patched_modules(
+                    {
+                        "streamlit": fake_streamlit,
+                        "pandas": fake_pandas,
+                        "config": fake_config,
+                        "database": fake_database,
+                        "analytics": fake_analytics,
+                        "pandasai": fake_pandasai,
+                    }
+                ):
+                    with temporary_working_directory(Path(tmpdir)):
+                        sys.modules.pop("app", None)
+                        app = importlib.import_module("app")
+            finally:
+                utils_module._pandas = original_pandas
 
             self.assertEqual(app.db_path, "inventory.db")
 

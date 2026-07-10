@@ -5,7 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from database import DATABASE_PATH, INVENTORY_VALUE_COLUMN, validate_product_schema
+from database import (
+    DATABASE_PATH,
+    INVENTORY_VALUE_COLUMN,
+    get_product_schema_description,
+    validate_product_schema,
+)
 
 
 class DatabaseSchemaTests(unittest.TestCase):
@@ -64,6 +69,33 @@ class DatabaseSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "STOCK"):
             validate_product_schema(self.db_path)
 
+    def test_get_product_schema_description_includes_all_required_columns(self) -> None:
+        description = get_product_schema_description()
+        self.assertIn("PRODUCT", description)
+        for column in ("NAME", "CATEGORY", "BRAND", "PRICE", "STOCK", "SIZE", "COLOR", "WEIGHT", "SPECIFICATIONS"):
+            self.assertIn(column, description)
+
+    def test_get_product_schema_description_uses_live_columns(self) -> None:
+        self._create_product_table(
+            """
+            CREATE TABLE PRODUCT (
+                ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                NAME TEXT,
+                CATEGORY TEXT,
+                BRAND TEXT,
+                PRICE REAL,
+                STOCK INTEGER,
+                SIZE TEXT,
+                COLOR TEXT,
+                WEIGHT REAL,
+                SPECIFICATIONS TEXT
+            )
+            """
+        )
+        description = get_product_schema_description(self.db_path)
+        self.assertIn("BRAND", description)
+        self.assertIn("SPECIFICATIONS", description)
+
 
 class AppSourceTests(unittest.TestCase):
     def test_dashboard_startup_query_uses_the_shared_stock_schema(self) -> None:
@@ -72,6 +104,7 @@ class AppSourceTests(unittest.TestCase):
         self.assertIn("validate_product_schema", app_source)
         self.assertIn("INVENTORY_VALUE_COLUMN", app_source)
         self.assertIn("PRODUCT_TABLE", app_source)
+        self.assertIn("get_product_schema_description", app_source)
         self.assertIn("COALESCE(SUM(price *", app_source)
         self.assertNotIn("db_path = 'inventory.db'", app_source)
         self.assertNotIn("quantity", app_source.lower())

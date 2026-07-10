@@ -85,6 +85,45 @@ def _raise_for_missing_columns(actual_columns: list[str]) -> None:
         )
 
 
+_PRODUCT_COLUMN_SQL_TYPES = {
+    "ID": "INTEGER PRIMARY KEY AUTOINCREMENT",
+    "NAME": "TEXT",
+    "CATEGORY": "TEXT",
+    "BRAND": "TEXT",
+    "PRICE": "REAL",
+    INVENTORY_VALUE_COLUMN: "INTEGER",
+    "SIZE": "TEXT",
+    "COLOR": "TEXT",
+    "WEIGHT": "REAL",
+    "SPECIFICATIONS": "TEXT",
+}
+
+
+def get_product_schema_description(db_path: str | Path | None = None) -> str:
+    """Return a full PRODUCT schema description for NL→SQL prompts.
+
+    Prefers live column names from ``db_path`` when the table exists; otherwise
+    falls back to ``PRODUCT_REQUIRED_COLUMNS``.
+    """
+
+    columns: list[str] = list(PRODUCT_REQUIRED_COLUMNS)
+    if db_path is not None:
+        try:
+            with get_connection(db_path) as connection:
+                if _product_table_exists(connection):
+                    live_columns = _get_product_columns(connection)
+                    if live_columns:
+                        columns = live_columns
+        except Exception:
+            columns = list(PRODUCT_REQUIRED_COLUMNS)
+
+    rendered = ", ".join(
+        f"{column} {_PRODUCT_COLUMN_SQL_TYPES.get(str(column).upper(), 'TEXT')}"
+        for column in columns
+    )
+    return f"Product table schema: {PRODUCT_TABLE} ({rendered})"
+
+
 def _ensure_product_table_matches_current_schema(connection: sqlite3.Connection) -> None:
     """Create or repair the PRODUCT table so it matches the current schema."""
 
