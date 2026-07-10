@@ -4,7 +4,13 @@ import json
 import warnings
 from pathlib import Path
 
-from audit import AUDIT_LOG_WARN_BYTES, append_audit_event, get_audit_log_path
+from audit import (
+    AUDIT_LOG_KEEP_ROTATIONS,
+    AUDIT_LOG_WARN_BYTES,
+    append_audit_event,
+    get_audit_log_path,
+    rotate_audit_log_if_needed,
+)
 from prompt import (
     COLUMN_MAPPING_PROMPT_NAME,
     COLUMN_MAPPING_PROMPT_VERSION,
@@ -57,10 +63,11 @@ def test_build_column_mapping_prompt_contains_columns():
     assert COLUMN_MAPPING_PROMPT_VERSION
 
 
-def test_append_audit_event_warns_when_log_exceeds_size_limit(tmp_path: Path):
+def test_append_audit_event_rotates_when_log_exceeds_size_limit(tmp_path: Path):
     db_path = tmp_path / "inventory.db"
     db_path.write_text("", encoding="utf-8")
     audit_path = get_audit_log_path(db_path)
+    archive_path = audit_path.with_name(f"{audit_path.name}.1")
 
     # Pre-create a log file that is exactly at the threshold.
     audit_path.write_bytes(b"x" * AUDIT_LOG_WARN_BYTES)
@@ -71,7 +78,13 @@ def test_append_audit_event_warns_when_log_exceeds_size_limit(tmp_path: Path):
 
     assert len(caught) == 1
     assert issubclass(caught[0].category, UserWarning)
-    assert "100.0 MB" in str(caught[0].message)
+    assert "rotated" in str(caught[0].message).lower()
+    assert archive_path.exists()
+    assert archive_path.stat().st_size == AUDIT_LOG_WARN_BYTES
+    # Fresh active log should contain only the newly appended event.
+    payload = json.loads(audit_path.read_text(encoding="utf-8").strip())
+    assert payload["event_type"] == "test_event"
+    assert payload["details"]["key"] == "value"
 
 
 def test_append_audit_event_no_warning_below_size_limit(tmp_path: Path):
@@ -83,6 +96,35 @@ def test_append_audit_event_no_warning_below_size_limit(tmp_path: Path):
         append_audit_event(db_path, "test_event", {"key": "value"})
 
     assert len(caught) == 0
+
+
+def test_rotate_audit_log_keeps_newest_archives(tmp_path: Path):
+    audit_path = tmp_path / "ai_operation_audit.jsonl"
+    audit_path.write_bytes(b"current")
+    for index in range(1, AUDIT_LOG_KEEP_ROTATIONS + 1):
+        audit_path.with_name(f"{audit_path.name}.{index}").write_text(
+            f"archive-{index}",
+            encoding="utf-8",
+        )
+
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        rotated = rotate_audit_log_if_needed(audit_path, max_bytes=1)
+
+    assert rotated is True
+    assert not audit_path.exists()
+    assert audit_path.with_name(f"{audit_path.name}.1").read_text(encoding="utf-8") == "current"
+    assert audit_path.with_name(f"{audit_path.name}.2").read_text(encoding="utf-8") == "archive-1"
+    assert audit_path.with_name(f"{audit_path.name}.3").read_text(encoding="utf-8") == "archive-2"
+    assert not audit_path.with_name(f"{audit_path.name}.4").exists()
+
+
+def test_rotate_audit_log_noop_below_threshold(tmp_path: Path):
+    audit_path = tmp_path / "ai_operation_audit.jsonl"
+    audit_path.write_text("small", encoding="utf-8")
+
+    assert rotate_audit_log_if_needed(audit_path, max_bytes=1000) is False
+    assert audit_path.read_text(encoding="utf-8") == "small"
 
 
 def test_map_columns_uses_versioned_prompt_builder():

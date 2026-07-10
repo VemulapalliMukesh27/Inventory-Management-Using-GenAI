@@ -166,6 +166,7 @@ class HelperSmokeTests(unittest.TestCase):
         fake_streamlit.error = lambda *args, **kwargs: None
         fake_streamlit.success = lambda *args, **kwargs: None
         fake_streamlit.warning = lambda *args, **kwargs: None
+        fake_streamlit.info = lambda *args, **kwargs: None
 
         fake_pandas = types.ModuleType("pandas")
         fake_pandas.read_excel = lambda uploaded_file: None
@@ -179,6 +180,7 @@ class HelperSmokeTests(unittest.TestCase):
         fake_database.DATABASE_PATH = Path("inventory.db")
         fake_database.INVENTORY_VALUE_COLUMN = "STOCK"
         fake_database.PRODUCT_TABLE = "PRODUCT"
+        fake_database.ensure_schema = lambda path: None
         fake_database.validate_product_schema = lambda path: None
         fake_database.get_product_schema_description = (
             lambda path=None: "Product table schema: PRODUCT (ID INTEGER, NAME TEXT, STOCK INTEGER)"
