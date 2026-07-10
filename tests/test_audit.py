@@ -98,3 +98,22 @@ def test_map_columns_uses_versioned_prompt_builder():
     # The prompt must contain the columns so the model can produce a mapping.
     assert "Name" in captured["prompt"]
     assert "NAME" in captured["prompt"]
+
+
+def test_heuristic_and_prompt_fallback_agree_on_aliases():
+    from prompt import _fallback_column_mapping, build_column_mapping_prompt
+    from utils import _heuristic_column_mapping
+
+    excel_columns = ["Product Name", "Qty", "Colour", "Cost"]
+    database_columns = ["ID", "NAME", "PRICE", "STOCK", "COLOR"]
+
+    heuristic = _heuristic_column_mapping(excel_columns, database_columns)
+    fallback = json.loads(
+        _fallback_column_mapping(build_column_mapping_prompt(excel_columns, database_columns))
+    )
+
+    assert heuristic == fallback
+    assert heuristic["Product Name"] == "NAME"
+    assert heuristic["Qty"] == "STOCK"
+    assert heuristic["Colour"] == "COLOR"
+    assert heuristic["Cost"] == "PRICE"

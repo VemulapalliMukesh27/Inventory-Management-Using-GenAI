@@ -24,6 +24,9 @@ class FakeFrame:
         self._rows = list(rows)
         self.columns = FakeColumns(list(self._rows[0].keys()) if self._rows else [])
 
+    def __len__(self):
+        return len(self._rows)
+
     def iterrows(self):
         if not self._rows:
             return
@@ -419,6 +422,140 @@ def test_process_excel_file_blocks_destructive_actions_without_approval(
     assert events[-1]["event_type"] == "excel_import_processed"
     assert events[-1]["details"]["status"] == "blocked"
     assert events[-1]["details"]["error"].endswith("Blocked action: REMOVE.")
+
+
+def test_process_excel_file_remove_by_id_with_duplicate_names(
+    excel_processing_module,
+    inventory_db: Path,
+):
+    with sqlite3.connect(inventory_db) as connection:
+        connection.execute(
+            """
+            INSERT INTO PRODUCT
+            (NAME, CATEGORY, BRAND, PRICE, STOCK, SIZE, COLOR, WEIGHT, SPECIFICATIONS)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Widget", "Gadgets", "Acme", 1.0, 1, "S", "Red", 0.5, "Duplicate name"),
+        )
+        widget_ids = [
+            row[0]
+            for row in connection.execute(
+                "SELECT ID FROM PRODUCT WHERE NAME = ? ORDER BY ID",
+                ("Widget",),
+            )
+        ]
+    target_id = widget_ids[0]
+
+    excel_processing_module.pd.read_excel = lambda uploaded_file: FakeFrame(
+        [{"Id": target_id, "Name": "Widget"}]
+    )
+
+    excel_processing_module.process_excel_file(
+        object(),
+        str(inventory_db),
+        "remove",
+        allow_destructive_actions=True,
+    )
+
+    with sqlite3.connect(inventory_db) as connection:
+        remaining_widget_ids = [
+            row[0]
+            for row in connection.execute(
+                "SELECT ID FROM PRODUCT WHERE NAME = ? ORDER BY ID",
+                ("Widget",),
+            )
+        ]
+        all_names = [row[0] for row in connection.execute("SELECT NAME FROM PRODUCT ORDER BY NAME")]
+
+    assert target_id not in remaining_widget_ids
+    assert len(remaining_widget_ids) == 1
+    assert "Gizmo" in all_names
+
+
+def test_process_excel_file_remove_rejects_ambiguous_name(
+    excel_processing_module,
+    inventory_db: Path,
+):
+    with sqlite3.connect(inventory_db) as connection:
+        connection.execute(
+            """
+            INSERT INTO PRODUCT
+            (NAME, CATEGORY, BRAND, PRICE, STOCK, SIZE, COLOR, WEIGHT, SPECIFICATIONS)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Widget", "Gadgets", "Acme", 1.0, 1, "S", "Red", 0.5, "Duplicate name"),
+        )
+
+    excel_processing_module.pd.read_excel = lambda uploaded_file: FakeFrame([{"Name": "Widget"}])
+
+    with pytest.raises(excel_processing_module.AmbiguousProductMatchError, match="Ambiguous remove"):
+        excel_processing_module.process_excel_file(
+            object(),
+            str(inventory_db),
+            "remove",
+            allow_destructive_actions=True,
+        )
+
+    with sqlite3.connect(inventory_db) as connection:
+        widget_count = connection.execute(
+            "SELECT COUNT(*) FROM PRODUCT WHERE NAME = ?",
+            ("Widget",),
+        ).fetchone()[0]
+    assert widget_count == 2
+
+
+def test_process_excel_file_modify_by_id(
+    excel_processing_module,
+    inventory_db: Path,
+):
+    with sqlite3.connect(inventory_db) as connection:
+        widget_id = connection.execute(
+            "SELECT ID FROM PRODUCT WHERE NAME = ?",
+            ("Widget",),
+        ).fetchone()[0]
+
+    excel_processing_module.pd.read_excel = lambda uploaded_file: FakeFrame(
+        [{"Id": widget_id, "Name": "Widget", "Category": "ID Updated", "Stock": 99}]
+    )
+
+    excel_processing_module.process_excel_file(
+        object(),
+        str(inventory_db),
+        "modify",
+        allow_destructive_actions=True,
+    )
+
+    with sqlite3.connect(inventory_db) as connection:
+        row = connection.execute(
+            "SELECT ID, NAME, CATEGORY, STOCK FROM PRODUCT WHERE ID = ?",
+            (widget_id,),
+        ).fetchone()
+
+    assert row == (widget_id, "Widget", "ID Updated", 99)
+
+
+def test_estimate_import_impact_reports_ambiguous_names(
+    excel_processing_module,
+    inventory_db: Path,
+):
+    with sqlite3.connect(inventory_db) as connection:
+        connection.execute(
+            """
+            INSERT INTO PRODUCT
+            (NAME, CATEGORY, BRAND, PRICE, STOCK, SIZE, COLOR, WEIGHT, SPECIFICATIONS)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Widget", "Gadgets", "Acme", 1.0, 1, "S", "Red", 0.5, "Duplicate name"),
+        )
+
+    excel_processing_module.pd.read_excel = lambda uploaded_file: FakeFrame([{"Name": "Widget"}])
+    preview = excel_processing_module.preview_excel_import(object(), str(inventory_db))
+    impact = excel_processing_module.estimate_import_impact(preview, str(inventory_db), "remove")
+
+    assert impact["rows_in_file"] == 1
+    assert impact["matched_db_rows"] == 2
+    assert impact["ambiguous_names"] == ["Widget"]
+    assert impact["identity_modes"] == ["NAME"]
 
 
 def test_get_gemini_response_uses_mocked_sdk_when_api_key_is_available(monkeypatch):

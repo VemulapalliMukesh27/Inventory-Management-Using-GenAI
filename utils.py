@@ -76,6 +76,27 @@ def _normalize_identifier(value: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "_", value.upper()).strip("_")
 
 
+def _normalize_alias_token(value: str) -> str:
+    """Alphanumeric-only token used for synonym matching (e.g. Product Name → PRODUCTNAME)."""
+
+    return re.sub(r"[^A-Z0-9]+", "", value.upper())
+
+
+COLUMN_MAPPING_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "NAME": ("NAME", "PRODUCTNAME", "ITEMNAME", "PRODUCT"),
+    "CATEGORY": ("CATEGORY", "TYPE", "GROUP"),
+    "BRAND": ("BRAND",),
+    "PRICE": ("PRICE", "COST", "AMOUNT", "RATE"),
+    "STOCK": ("STOCK", "QUANTITY", "QTY", "INVENTORY"),
+    "QUANTITY": ("QUANTITY", "STOCK", "QTY", "INVENTORY"),
+    "COLOR": ("COLOR", "COLOUR"),
+    "SIZE": ("SIZE",),
+    "WEIGHT": ("WEIGHT",),
+    "SPECIFICATIONS": ("SPECIFICATIONS", "SPECIFICATION", "DETAILS", "DESCRIPTION", "SPEC"),
+    "ID": ("ID", "PRODUCTID"),
+}
+
+
 def _existing_columns(db_path: str) -> list[str]:
     with sqlite3.connect(db_path) as connection:
         cursor = connection.cursor()
@@ -194,29 +215,21 @@ def _heuristic_column_mapping(
     existing_lookup = {_normalize_identifier(column): column for column in existing_columns}
     result: dict[str, str] = {}
 
-    synonym_groups = {
-        "NAME": ("NAME", "PRODUCTNAME", "ITEMNAME", "PRODUCT"),
-        "CATEGORY": ("CATEGORY", "TYPE", "GROUP"),
-        "BRAND": ("BRAND",),
-        "PRICE": ("PRICE", "COST", "AMOUNT", "RATE"),
-        "STOCK": ("STOCK", "QUANTITY", "QTY", "INVENTORY"),
-        "QUANTITY": ("QUANTITY", "STOCK", "QTY", "INVENTORY"),
-        "COLOR": ("COLOR", "COLOUR"),
-        "SIZE": ("SIZE",),
-        "WEIGHT": ("WEIGHT",),
-        "SPECIFICATIONS": ("SPECIFICATIONS", "SPECIFICATION", "DETAILS", "DESCRIPTION", "SPEC"),
-        "ID": ("ID", "PRODUCTID"),
-    }
-
     for excel_column in excel_columns:
         normalized = _normalize_identifier(str(excel_column))
+        alias_token = _normalize_alias_token(str(excel_column))
         if normalized in existing_lookup:
             result[str(excel_column)] = existing_lookup[normalized]
             continue
 
         mapped_column = None
-        for target, aliases in synonym_groups.items():
-            if normalized == target or normalized in aliases:
+        for target, aliases in COLUMN_MAPPING_SYNONYMS.items():
+            if (
+                normalized == target
+                or normalized in aliases
+                or alias_token == target
+                or alias_token in aliases
+            ):
                 mapped_column = existing_lookup.get(_normalize_identifier(target), target)
                 break
 
